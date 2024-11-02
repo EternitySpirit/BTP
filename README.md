@@ -1,2 +1,2 @@
 # BTP
-Dociments related to BTP work
+Documents related to BTP work
