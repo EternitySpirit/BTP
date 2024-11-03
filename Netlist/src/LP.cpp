@@ -58,7 +58,8 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
     }
 
     // Define the final time variable: an integer variable representing the final time step.
-    IntVar final_time = model.NewIntVar(0, maxTimeSteps - 1);
+    const Domain time_domain(0, maxTimeSteps - 1);
+    const IntVar final_time = model.NewIntVar(time_domain);
 
     // Objective: Minimize final_time.
     model.Minimize(final_time);
