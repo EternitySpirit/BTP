@@ -2,8 +2,11 @@
 #include <vector>
 #include <limits>
 #include <stack>
-#include "ortools/linear_solver/linear_solver.h"
+// #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/sat/cp_model.h"
+#include "ortools/sat/cp_model.pb.h"
+#include "ortools/sat/cp_model_solver.h"
+#include "ortools/util/sorted_interval_list.h"
 
 #define MAXFANIN 5
 #define MAXLEVEL 500
