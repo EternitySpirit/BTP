@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <limits>
+#include <stack>
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/sat/cp_model.h"
 
@@ -84,7 +85,7 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
                   //Constraint to ensure i starts only after predecessor is completed
                   for (int s = 0; s<= t; s++)
                   {
-                    model.AddImplication(x[predecessor][t].Not(), x[i][s].Not());
+                    model.AddImplication(x[predecessor][t], x[i][s].Not());
                   }
                   
                 }
@@ -476,7 +477,7 @@ void update_alap (int index, int lineid)
 
 
 int main(int argc, char *argv[]) {
-    const char *file_name = "./src/xor5_d.txt";
+    const char *file_name = "./src/net1.txt";
     netlist = fopen(file_name, "r");
 
     if (!netlist) {
@@ -490,8 +491,8 @@ int main(int argc, char *argv[]) {
     compute_asap_level();
     compute_alap_level();
 
-    int M = 4;
-    int maxTimeSteps = 10;
+    int M = 1;
+    int maxTimeSteps = 4;
 
     std::cout << "\n************ BENCHMARK: " << argv[1] << " *************\n";
     //print_gates();
