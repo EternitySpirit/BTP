@@ -8,6 +8,7 @@
 #define MAXFANIN 5
 #define MAXLEVEL 500
 #define MAXPI 100
+#define MAXGATES 10000
 
 struct table_gate {
     int fanin;
@@ -41,7 +42,7 @@ void update_alap(int gate_index, int output);
 using namespace operations_research;
 using namespace sat;
 
-void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps, const std::vector<Gate>& gates) {
+void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps, const std::vector<table_gate>& gates) {
     CpModelBuilder model;
 
     // Define variables: x[i][t] is True if gate i is assigned to time step t.
