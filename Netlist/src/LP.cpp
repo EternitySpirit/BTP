@@ -26,13 +26,16 @@ int ng = 0;
 int tempvar = 1;
 FILE *netlist;
 
-// Forward declarations for existing C functions
 void parse_gates();
 void compute_asap_level();
 void compute_alap_level();
 void compute_list_level();
 void print_gates();
 void print_stat();
+int count_v(const char* line);
+void get_vars(const char* line, int varid[], int nv);
+bool all_alap_labeled();
+void update_alap(int gate_index, int output);
 
 namespace operations_research {
 
@@ -43,7 +46,6 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
         return;
     }
 
-    // Variables: x[i][t] = 1 if gate i is scheduled at time t, else 0
     std::vector<std::vector<MPVariable*>> x(numGates, std::vector<MPVariable*>(maxTimeSteps));
     for (int i = 0; i < numGates; ++i) {
         for (int t = 0; t < maxTimeSteps; ++t) {
@@ -51,14 +53,11 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
         }
     }
 
-    // Final time variable for objective minimization
     MPVariable* final_time = solver->MakeIntVar(0.0, maxTimeSteps - 1, "FinalTime");
+    MPObjective* objective = solver->MutableObjective();
+    objective->SetCoefficient(final_time, 1);
+    objective->SetMinimization();
 
-    // Objective: Minimize the final time step
-    solver->Minimize(final_time);
-
-    // 1. Task Assignment Constraints
-    // Ensure that for each time step, the number of gates assigned does not exceed M
     for (int t = 0; t < maxTimeSteps; ++t) {
         MPConstraint* row_constraint = solver->MakeRowConstraint(0, M, "RowLimit_" + std::to_string(t));
         for (int i = 0; i < numGates; ++i) {
@@ -66,25 +65,19 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
         }
     }
 
-    // 2. Dependency Constraints
-    // Ensure each gate starts only after all its predecessors are completed
     for (int i = 0; i < numGates; ++i) {
         for (int j = 0; j < gates[i].fanin; ++j) {
             int predecessor = gates[i].input[j];
-            if (predecessor >= 0) {  // Only apply if dependency is valid
+            if (predecessor >= 0) {
                 for (int t = 0; t < maxTimeSteps - 1; ++t) {
-                    // Constraint to ensure i starts only after predecessor is completed
-                    for (int s = 0; s <= t; s++)
-                    {
-                        x[predecessor][t]>x[i][s]
-                    }
-                    
+                    MPConstraint* dependency_constraint = solver->MakeRowConstraint(-MPSolver::infinity(), 0);
+                    dependency_constraint->SetCoefficient(x[predecessor][t], -1);
+                    dependency_constraint->SetCoefficient(x[i][t + 1], 1);
                 }
             }
         }
     }
 
-    // Solve the ILP
     const MPSolver::ResultStatus result_status = solver->Solve();
     if (result_status == MPSolver::OPTIMAL) {
         std::cout << "Optimal final time: " << final_time->solution_value() << std::endl;
@@ -103,7 +96,7 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
 }  // namespace operations_research
 
 int main(int argc, char *argv[]) {
-    const char *file_name = "./xor5_d.txt";
+    const char *file_name = "BENCH/Bench/xor5_d.txt";
     netlist = fopen(file_name, "r");
 
     if (!netlist) {
@@ -117,8 +110,8 @@ int main(int argc, char *argv[]) {
     compute_asap_level();
     compute_alap_level();
 
-    int M = 4;           // Crossbar array max rows per level
-    int maxTimeSteps = 100; // Adjust maximum time steps as per circuit complexity
+    int M = 4;
+    int maxTimeSteps = 10;
 
     std::cout << "\n************ BENCHMARK: " << argv[1] << " *************\n";
     print_gates();
@@ -126,9 +119,10 @@ int main(int argc, char *argv[]) {
 
     operations_research::MinimizeFinalTimeStepWithConstraints(ng, M, maxTimeSteps);
 
+    if (output_file) {
+        fclose(output_file);
+    }
     fclose(netlist);
-    fclose(output_file);
-
     return 0;
 }
 
@@ -225,29 +219,32 @@ int count_v (char x[])
   variables in the array varid[]. If a variable starts
   with 'x', 5000 is added to its id.
   For n20, the integer 20 is stored in varid[];
-  for x20, the integer 5020 is stored in varid[]
+  for x20, the integer 5020 is stored in varid[].
 *******************************************************/
-get_vars (char x[], int varid[], int nv)
+void get_vars(char x[], int varid[], int nv)
 {
-  int i, tval, count, nx_flag;
+  int i = 0, tval, count = 0, nx_flag;
 
-  i=0; count=0;
-  do
-    {
-      while (!isdigit(x[i])) i++;
-      
-      if (x[i-1] == 'x') nx_flag=1;  else nx_flag=0;
+  do {
+    // Skip to the next digit in x[]
+    while (!isdigit(x[i])) i++;
 
-      tval = 0;
-      while (isdigit(x[i])) {
-        tval = tval*10 + (x[i] - '0');
-	i++;
-      } 
+    // Check if the variable starts with 'x'
+    if (x[i-1] == 'x') nx_flag = 1;
+    else nx_flag = 0;
 
-      if (nx_flag == 1) tval = 5000 + tval;
-      varid[count++] = tval;
+    // Convert number to integer
+    tval = 0;
+    while (isdigit(x[i])) {
+      tval = tval * 10 + (x[i] - '0');
+      i++;
     }
-  while (count < nv); 
+
+    // If it starts with 'x', add 5000
+    if (nx_flag == 1) tval = 5000 + tval;
+    varid[count++] = tval;
+
+  } while (count < nv);
 }
 
 
@@ -425,16 +422,13 @@ printf ("\n*** %d ***", maxl);
   Test whether all the gates have been labeled using
   ALAP scheduling.
 ****************************************************/
-int all_alap_labeled()
+bool all_alap_labeled()
 {
-  int i, flag;
-
-  flag=0;
-
-  for (i=0; i<ng; i++)
-    if (gates[i].alap_level == -1)  return 0;
-
-  return 1;
+  for (int i = 0; i < ng; i++) {
+    if (gates[i].alap_level == -1)  // If any gate is not labeled
+      return false;
+  }
+  return true;  // All gates are labeled
 }
 
 
