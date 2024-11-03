@@ -75,13 +75,18 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
         model.AddLessOrEqual(row_sum, M);
     }
 
-    // Dependency constraints: if gate i depends on predecessor gate, it should be scheduled afterward.
-    for (int i = 0; i < numGates; ++i) {
+        // Dependency constraints: if gate i depends on predecessor gate, it should be scheduled afterward.
+       for (int i = 0; i < numGates; ++i) {
         for (int j = 0; j < gates[i].fanin; ++j) {
             int predecessor = gates[i].input[j];
             if (predecessor >= 0) {
                 for (int t = 0; t < maxTimeSteps - 1; ++t) {
-                    model.AddImplication(x[predecessor][t].Not(), x[i][t + 1]);
+                  //Constraint to ensure i starts only after predecessor is completed
+                  for (int s = 0; s<= t; s++)
+                  {
+                    model.AddImplication(x[predecessor][t].Not(), x[i][s].Not());
+                  }
+                  
                 }
             }
         }
