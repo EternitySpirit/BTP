@@ -91,15 +91,44 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
             }
         }
     }
+   // Find leaves using DFS and apply the final_time constraint only to them.
+    std::vector<bool> visited(numGates, false);
+    std::vector<int> leaves;
 
-    // Constraint to set final_time as the last occupied time step.
     for (int i = 0; i < numGates; ++i) {
-        for (int t = 0; t < maxTimeSteps; ++t) {
-            model.AddLessOrEqual(final_time, t).OnlyEnforceIf(x[i][t]);
+        if (!visited[i]) {
+            std::stack<int> stack;
+            stack.push(i);
+            visited[i] = true;
+
+            while (!stack.empty()) {
+                int node = stack.top();
+                stack.pop();
+
+                // If the gate has no outputs, it's a leaf.
+                if (gates[node].output.empty()) {
+                    leaves.push_back(node);
+                }
+
+                // Visit all children of the current node.
+                for (int child : gates[node].output) {
+                    if (!visited[child]) {
+                        stack.push(child);
+                        visited[child] = true;
+                    }
+                }
+            }
         }
     }
 
-    // Solving the model.
+    // Apply final_time constraint only to leaves.
+    for (int leaf : leaves) {
+        for (int t = 0; t < maxTimeSteps; ++t) {
+            model.AddGreaterOrEqual(final_time, t).OnlyEnforceIf(x[leaf][t]);
+        }
+    }
+
+   // Solving the model.
     Model cp_model;
     CpSolverResponse response = SolveCpModel(model.Build(), &cp_model);
 
