@@ -2,8 +2,8 @@
 #include <vector>
 #include <limits>
 #include "ortools/linear_solver/linear_solver.h"
+#include "ortools/sat/cp_model.h"
 
-#define MAXGATES 5000
 #define MAXFANIN 5
 #define MAXLEVEL 500
 #define MAXPI 100
@@ -37,53 +37,72 @@ void get_vars(const char* line, int varid[], int nv);
 bool all_alap_labeled();
 void update_alap(int gate_index, int output);
 
-namespace operations_research {
+using namespace operations_research;
+using namespace sat;
 
-void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps) {
-    std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver("CBC"));
-    if (!solver) {
-        std::cerr << "Solver not available." << std::endl;
-        return;
-    }
+void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps, const std::vector<Gate>& gates) {
+    CpModelBuilder model;
 
-    std::vector<std::vector<MPVariable*>> x(numGates, std::vector<MPVariable*>(maxTimeSteps));
+    // Define variables: x[i][t] is True if gate i is assigned to time step t.
+    std::vector<std::vector<BoolVar>> x(numGates, std::vector<BoolVar>(maxTimeSteps));
     for (int i = 0; i < numGates; ++i) {
         for (int t = 0; t < maxTimeSteps; ++t) {
-            x[i][t] = solver->MakeBoolVar("x_" + std::to_string(i) + "_" + std::to_string(t));
+            x[i][t] = model.NewBoolVar();
         }
     }
 
-    MPVariable* final_time = solver->MakeIntVar(0.0, maxTimeSteps - 1, "FinalTime");
-    MPObjective* objective = solver->MutableObjective();
-    objective->SetCoefficient(final_time, 1);
-    objective->SetMinimization();
+    // Define the final time variable: an integer variable representing the final time step.
+    IntVar final_time = model.NewIntVar(0, maxTimeSteps - 1);
 
+    // Objective: Minimize final_time.
+    model.Minimize(final_time);
+
+    // Each gate should be scheduled exactly once.
+    for (int i = 0; i < numGates; ++i) {
+        LinearExpr sum;
+        for (int t = 0; t < maxTimeSteps; ++t) {
+            sum += x[i][t];
+        }
+        model.AddEquality(sum, 1);
+    }
+
+    // Limit the number of gates that can be scheduled at each time step to M.
     for (int t = 0; t < maxTimeSteps; ++t) {
-        MPConstraint* row_constraint = solver->MakeRowConstraint(0, M, "RowLimit_" + std::to_string(t));
+        LinearExpr row_sum;
         for (int i = 0; i < numGates; ++i) {
-            row_constraint->SetCoefficient(x[i][t], 1);
+            row_sum += x[i][t];
         }
+        model.AddLessOrEqual(row_sum, M);
     }
 
+    // Dependency constraints: if gate i depends on predecessor gate, it should be scheduled afterward.
     for (int i = 0; i < numGates; ++i) {
         for (int j = 0; j < gates[i].fanin; ++j) {
             int predecessor = gates[i].input[j];
             if (predecessor >= 0) {
                 for (int t = 0; t < maxTimeSteps - 1; ++t) {
-                    MPConstraint* dependency_constraint = solver->MakeRowConstraint(-MPSolver::infinity(), 0);
-                    dependency_constraint->SetCoefficient(x[predecessor][t], -1);
-                    dependency_constraint->SetCoefficient(x[i][t + 1], 1);
+                    model.AddImplication(x[predecessor][t].Not(), x[i][t + 1]);
                 }
             }
         }
     }
 
-    const MPSolver::ResultStatus result_status = solver->Solve();
-    if (result_status == MPSolver::OPTIMAL) {
-        std::cout << "Optimal final time: " << final_time->solution_value() << std::endl;
+    // Constraint to set final_time as the last occupied time step.
+    for (int i = 0; i < numGates; ++i) {
+        for (int t = 0; t < maxTimeSteps; ++t) {
+            model.AddLessOrEqual(final_time, t).OnlyEnforceIf(x[i][t]);
+        }
+    }
+
+    // Solving the model.
+    Model cp_model;
+    CpSolverResponse response = SolveCpModel(model.Build(), &cp_model);
+
+    if (response.status() == CpSolverStatus::OPTIMAL) {
+        std::cout << "Optimal final time: " << SolutionIntegerValue(response, final_time) << std::endl;
         for (int i = 0; i < numGates; ++i) {
             for (int t = 0; t < maxTimeSteps; ++t) {
-                if (x[i][t]->solution_value() == 1) {
+                if (SolutionBooleanValue(response, x[i][t])) {
                     std::cout << "Gate " << i << " assigned to time step " << t << std::endl;
                 }
             }
@@ -92,8 +111,6 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
         std::cerr << "No optimal solution found!" << std::endl;
     }
 }
-
-}  // namespace operations_research
 
 /******************************************************
     Count the number of variables in line in x[] 
@@ -425,7 +442,7 @@ void update_alap (int index, int lineid)
 
 
 int main(int argc, char *argv[]) {
-    const char *file_name = "BENCH/Bench/xor5_d.txt";
+    const char *file_name = "./src/xor5_d.txt";
     netlist = fopen(file_name, "r");
 
     if (!netlist) {
@@ -443,8 +460,8 @@ int main(int argc, char *argv[]) {
     int maxTimeSteps = 10;
 
     std::cout << "\n************ BENCHMARK: " << argv[1] << " *************\n";
-    print_gates();
-    print_stat();
+    //print_gates();
+    //print_stat();
 
     operations_research::MinimizeFinalTimeStepWithConstraints(ng, M, maxTimeSteps);
 
