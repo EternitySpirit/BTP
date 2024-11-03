@@ -95,36 +95,55 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps)
 
 }  // namespace operations_research
 
-int main(int argc, char *argv[]) {
-    const char *file_name = "BENCH/Bench/xor5_d.txt";
-    netlist = fopen(file_name, "r");
+/******************************************************
+    Count the number of variables in line in x[] 
+******************************************************/
+int count_v (char x[])
+{
+  int i, k, count;
 
-    if (!netlist) {
-        std::cerr << "Error opening netlist file." << std::endl;
-        return 1;
-    }
+  k = strlen(x);
+  count = 0;
 
-    FILE *output_file = freopen("f1.txt", "w", stdout);
+  for (i=0; i<k; i++)
+    if ((x[i]=='n') || (x[i]=='x')) count++;
 
-    parse_gates();
-    compute_asap_level();
-    compute_alap_level();
-
-    int M = 4;
-    int maxTimeSteps = 10;
-
-    std::cout << "\n************ BENCHMARK: " << argv[1] << " *************\n";
-    print_gates();
-    print_stat();
-
-    operations_research::MinimizeFinalTimeStepWithConstraints(ng, M, maxTimeSteps);
-
-    if (output_file) {
-        fclose(output_file);
-    }
-    fclose(netlist);
-    return 0;
+  return count;
 }
+
+/*******************************************************
+  Read the string x[], and store the ids of all the
+  variables in the array varid[]. If a variable starts
+  with 'x', 5000 is added to its id.
+  For n20, the integer 20 is stored in varid[];
+  for x20, the integer 5020 is stored in varid[].
+*******************************************************/
+void get_vars(char x[], int varid[], int nv)
+{
+  int i = 0, tval, count = 0, nx_flag;
+
+  do {
+    // Skip to the next digit in x[]
+    while (!isdigit(x[i])) i++;
+
+    // Check if the variable starts with 'x'
+    if (x[i-1] == 'x') nx_flag = 1;
+    else nx_flag = 0;
+
+    // Convert number to integer
+    tval = 0;
+    while (isdigit(x[i])) {
+      tval = tval * 10 + (x[i] - '0');
+      i++;
+    }
+
+    // If it starts with 'x', add 5000
+    if (nx_flag == 1) tval = 5000 + tval;
+    varid[count++] = tval;
+
+  } while (count < nv);
+}
+
 
 void parse_gates()
 {
@@ -197,55 +216,7 @@ void parse_gates()
 
 
 
-/******************************************************
-    Count the number of variables in line in x[] 
-******************************************************/
-int count_v (char x[])
-{
-  int i, k, count;
 
-  k = strlen(x);
-  count = 0;
-
-  for (i=0; i<k; i++)
-    if ((x[i]=='n') || (x[i]=='x')) count++;
-
-  return count;
-}
-
-
-/*******************************************************
-  Read the string x[], and store the ids of all the
-  variables in the array varid[]. If a variable starts
-  with 'x', 5000 is added to its id.
-  For n20, the integer 20 is stored in varid[];
-  for x20, the integer 5020 is stored in varid[].
-*******************************************************/
-void get_vars(char x[], int varid[], int nv)
-{
-  int i = 0, tval, count = 0, nx_flag;
-
-  do {
-    // Skip to the next digit in x[]
-    while (!isdigit(x[i])) i++;
-
-    // Check if the variable starts with 'x'
-    if (x[i-1] == 'x') nx_flag = 1;
-    else nx_flag = 0;
-
-    // Convert number to integer
-    tval = 0;
-    while (isdigit(x[i])) {
-      tval = tval * 10 + (x[i] - '0');
-      i++;
-    }
-
-    // If it starts with 'x', add 5000
-    if (nx_flag == 1) tval = 5000 + tval;
-    varid[count++] = tval;
-
-  } while (count < nv);
-}
 
 
 /*************************************************
@@ -450,5 +421,37 @@ void update_alap (int index, int lineid)
 	    gates[index].alap_level = gates[j].alap_level + 1;
     }
   }
+}
+
+
+int main(int argc, char *argv[]) {
+    const char *file_name = "BENCH/Bench/xor5_d.txt";
+    netlist = fopen(file_name, "r");
+
+    if (!netlist) {
+        std::cerr << "Error opening netlist file." << std::endl;
+        return 1;
+    }
+
+    FILE *output_file = freopen("f1.txt", "w", stdout);
+
+    parse_gates();
+    compute_asap_level();
+    compute_alap_level();
+
+    int M = 4;
+    int maxTimeSteps = 10;
+
+    std::cout << "\n************ BENCHMARK: " << argv[1] << " *************\n";
+    print_gates();
+    print_stat();
+
+    operations_research::MinimizeFinalTimeStepWithConstraints(ng, M, maxTimeSteps);
+
+    if (output_file) {
+        fclose(output_file);
+    }
+    fclose(netlist);
+    return 0;
 }
 
