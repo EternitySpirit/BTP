@@ -31,6 +31,7 @@ int nPI = 0;
 int ng = 0;
 int tempvar = 1;
 FILE *netlist;
+std::map<int,std::vector<int>> adj_list;
 
 void parse_gates();
 void compute_asap_level();
@@ -153,6 +154,40 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
     }
 }
 
+// Function to find leaf nodes using DFS
+void find_leaves_with_final_time_constraint(int *leaves, int *leaf_count) {
+    bool visited[MAXGATES] = {false};  // Track visited nodes
+    int stack[MAXGATES];
+    int stack_top = -1;
+    *leaf_count = 0;
+
+    for (int i = 0; i < ng; i++) {
+        if (!visited[i]) {
+            // Initialize DFS stack with the current node
+            stack[++stack_top] = i;
+            visited[i] = true;
+
+            while (stack_top >= 0) {
+                int node = stack[stack_top--];  // Pop from stack
+
+                // If the gate has no outputs, it's a leaf node
+                if (gates[node].output_count == 0) {
+                    leaves[(*leaf_count)++] = node;
+                }
+
+                // Push all output gates (children) of the current node to stack
+                for (int j = 0; j < gates[node].output_count; j++) {
+                    int child = gates[node].output_gates[j];
+                    if (!visited[child]) {
+                        stack[++stack_top] = child;
+                        visited[child] = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /******************************************************
     Count the number of variables in line in x[] 
 ******************************************************/
@@ -268,6 +303,14 @@ void parse_gates()
 
       default: printf ("** Invalid variables on line: %s\n", line);
                exit;
+    }
+    for (int j = 0; j < gates[ng-1].fanin; j++)
+    {
+      if (varid[j]<5000)
+      {
+        adj_list[ng].push_back(varid[j])
+      }
+
     }
   }
 }
