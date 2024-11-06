@@ -102,31 +102,26 @@ void MinimizeFinalTimeStepWithConstraints(int numGates, int M, int maxTimeSteps,
    // Find leaves using DFS and apply the final_time constraint only to them.
     std::vector<bool> visited(numGates, false);
     std::vector<int> leaves;
+    std::stack<int> stack;
+    stack.push(0);
 
-    for (int i = 0; i < numGates; ++i) {
-        if (!visited[i]) {
-            std::stack<int> stack;
-            stack.push(i);
-            visited[i] = true;
-
-            while (!stack.empty()) {
+    while (!stack.empty()) {
                 int node = stack.top();
                 stack.pop();
+                if (visited[node]) continue;
+                visited[node] = true;
 
                 // If the gate has no outputs, it's a leaf.
-                if (gates[node].output.empty()) {
+                if (adj_list.find(node) == adj_list.end()) {
                     leaves.push_back(node);
                 }
 
                 // Visit all children of the current node.
-                for (int child : gates[node].output) {
+                for (int child : adj_list[node]) {
                     if (!visited[child]) {
                         stack.push(child);
-                        visited[child] = true;
                     }
                 }
-            }
-        }
     }
 
     // Apply final_time constraint only to leaves.
